@@ -140,9 +140,9 @@ python train_new.py
 python train_new.py --num-envs 16 --device cuda
 ```
 
-**Custom Timesteps & Reproducible Seed**:
+**Custom Timesteps (e.g. 10 Million steps) & Reproducible Seed**:
 ```bash
-python train_new.py --timesteps 500000 --num-envs 8 --seed 42
+python train_new.py --timesteps 10000000 --num-envs 16 --device cuda --seed 42
 ```
 
 ### 3. Monitor Real-Time Training Progress (TensorBoard)

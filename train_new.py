@@ -52,7 +52,7 @@ def make_env(rank: int, seed: int = None):
 def main():
     parser = argparse.ArgumentParser(description="HiveMind Pure PPO Training Pipeline")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible training (default: Truly Random per run)")
-    parser.add_argument("--timesteps", type=int, default=500000, help="Total timesteps to train (default: 500000)")
+    parser.add_argument("--timesteps", type=int, default=10000000, help="Total timesteps to train (default: 10000000)")
     parser.add_argument("--num-envs", type=int, default=8, help="Number of parallel environments for workstation CPU multi-processing (default: 8)")
     parser.add_argument("--device", type=str, default="auto", help="Compute device: 'cuda', 'cpu', or 'auto' (default: auto)")
     args = parser.parse_args()
