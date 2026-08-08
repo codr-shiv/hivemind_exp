@@ -58,7 +58,8 @@ class HiveMindSingleAgentEnv(gym.Env):
         self.obs_size = 15
         self.observation_space = spaces.Dict({
             "grid": spaces.Box(low=0, high=1, shape=(self.obs_size, self.obs_size, 5), dtype=np.float32),
-            "is_carrying": spaces.Discrete(2)
+            "is_carrying": spaces.Discrete(2),
+            "last_action": spaces.Discrete(7)
         })
 
         if self.render_mode == "human":
@@ -75,6 +76,7 @@ class HiveMindSingleAgentEnv(gym.Env):
         self.depot_pos_grid = (0, 0)
         self.max_steps = 500
         self.current_step = 0
+        self.last_action = 6
 
     def _grid_to_world(self, r, c):
         x = (c - self.grid_size/2.0) * self.cell_size + (self.cell_size/2.0)
@@ -91,6 +93,7 @@ class HiveMindSingleAgentEnv(gym.Env):
 
         self.is_carrying = False
         self.current_step = 0
+        self.last_action = 6
         
         pb.resetSimulation(physicsClientId=self.client_id)
         pb.setGravity(0, 0, -9.81, physicsClientId=self.client_id)
@@ -291,6 +294,15 @@ class HiveMindSingleAgentEnv(gym.Env):
         reward = -0.02
         terminated = False
         truncated = self.current_step >= self.max_steps
+
+        # Anti-Oscillation Reversal Penalty (Immediate Inverse Action Toggling)
+        if (action == 0 and self.last_action == 1) or (action == 1 and self.last_action == 0) or \
+           (action == 2 and self.last_action == 3) or (action == 3 and self.last_action == 2):
+            reward -= 0.08
+
+        # Forward Momentum Bonus (Smooth Consecutive Forward Motion)
+        if action == 0 and self.last_action == 0:
+            reward += 0.02
 
         prev_robot_pos, robot_orn = pb.getBasePositionAndOrientation(self.robot_id, physicsClientId=self.client_id)
         rx, ry, rz = prev_robot_pos
@@ -511,6 +523,7 @@ class HiveMindSingleAgentEnv(gym.Env):
                     pbrs_reward = (dist_prev - dist_curr) * 2.0
                     reward += pbrs_reward
 
+        self.last_action = action
         obs = self._get_obs()
         info = self._get_info()
         return obs, reward, terminated, truncated, info
@@ -604,7 +617,8 @@ class HiveMindSingleAgentEnv(gym.Env):
 
         return {
             "grid": grid,
-            "is_carrying": int(self.is_carrying)
+            "is_carrying": int(self.is_carrying),
+            "last_action": int(self.last_action)
         }
 
     def _get_info(self):

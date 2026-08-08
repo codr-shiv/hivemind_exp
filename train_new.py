@@ -41,6 +41,7 @@ class TrainingCheckpointCallback(BaseCallback):
 
 def make_env(rank: int, seed: int = None):
     def _init():
+        import hivemind_env  # Required inside worker process for SubprocVecEnv
         env = gym.make("HiveMind-SingleAgent", render_mode="DIRECT")
         env_seed = (seed + rank) if seed is not None else None
         env.reset(seed=env_seed)
@@ -52,6 +53,8 @@ def main():
     parser = argparse.ArgumentParser(description="HiveMind Pure PPO Training Pipeline")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducible training (default: Truly Random per run)")
     parser.add_argument("--timesteps", type=int, default=500000, help="Total timesteps to train (default: 500000)")
+    parser.add_argument("--num-envs", type=int, default=8, help="Number of parallel environments for workstation CPU multi-processing (default: 8)")
+    parser.add_argument("--device", type=str, default="auto", help="Compute device: 'cuda', 'cpu', or 'auto' (default: auto)")
     args = parser.parse_args()
 
     print("=========================================================================")
@@ -59,22 +62,45 @@ def main():
     print("=========================================================================")
 
     TOTAL_TIMESTEPS = args.timesteps
-    NUM_ENVS = 4
+    NUM_ENVS = args.num_envs
     SEED = args.seed
+
+    # 1. Device Selection (NVIDIA GPU / CUDA Acceleration)
+    if args.device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        device = args.device
+
+    if device.startswith("cuda") and torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"[*] [GPU ACCELERATION ACTIVATED] Device: {device.upper()} | Model: {gpu_name}")
+        torch.backends.cudnn.benchmark = True
+    else:
+        print(f"[*] [COMPUTE DEVICE] Running on: CPU")
+        if not torch.cuda.is_available():
+            print("    Notice: PyTorch CUDA is not detected in this environment.")
+            print("    To enable NVIDIA GPU acceleration, install CUDA-enabled PyTorch:")
+            print("    pip install torch --index-url https://download.pytorch.org/whl/cu121\n")
 
     if SEED is not None:
         print(f"[*] Training with Fixed Reproducible Base Seed: {SEED}")
     else:
         print("[*] Training with Dynamic System Entropy (Truly Random World Generation Per Episode)")
 
+    print(f"[*] Parallel CPU Worker Processes: {NUM_ENVS}")
+
     MODEL_DIR = "./models"
     LOG_DIR = "./tensorboard_logs"
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    # Vectorized environments with VecMonitor for TensorBoard rollout charts
+    # Vectorized environments: SubprocVecEnv for parallel worker processes
     env_fns = [make_env(rank=i, seed=SEED) for i in range(NUM_ENVS)]
-    vec_env = DummyVecEnv(env_fns)
+    if NUM_ENVS > 1:
+        from stable_baselines3.common.vec_env import SubprocVecEnv
+        vec_env = SubprocVecEnv(env_fns)
+    else:
+        vec_env = DummyVecEnv(env_fns)
     vec_env = VecMonitor(vec_env)
 
     policy_kwargs = dict(
@@ -99,6 +125,7 @@ def main():
         policy_kwargs=policy_kwargs,
         tensorboard_log=LOG_DIR,
         verbose=1,
+        device=device,
         seed=SEED
     )
 

@@ -7,7 +7,8 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
     """
     Custom feature extractor for HiveMind:
     - Passes the 15x15x5 egocentric grid through a CNN (local spatial/obstacle perception).
-    - Concatenates `is_carrying` scalar (phase flag).
+    - Concatenates `is_carrying` scalar (one-hot Discrete(2) = 2 dims).
+    - Concatenates `last_action` scalar (one-hot Discrete(7) = 7 dims).
     """
     def __init__(self, observation_space: gym.spaces.Dict, features_dim: int = 256):
         super().__init__(observation_space, features_dim)
@@ -27,9 +28,10 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         with torch.no_grad():
             dummy_grid = torch.zeros(1, 5, 15, 15)
             cnn_output_dim = self.cnn(dummy_grid).shape[1]
-            # SB3 automatically one-hot encodes Discrete(2) into 2 dims
+            # SB3 automatically one-hot encodes Discrete(2) into 2 dims and Discrete(7) into 7 dims
             dummy_carrying = torch.zeros(1, 2)
-            dummy_combined = torch.cat((torch.zeros(1, cnn_output_dim), dummy_carrying), dim=1)
+            dummy_last_action = torch.zeros(1, 7)
+            dummy_combined = torch.cat((torch.zeros(1, cnn_output_dim), dummy_carrying, dummy_last_action), dim=1)
             total_concat_dim = dummy_combined.shape[1]
         
         # Final linear layer to project to requested `features_dim`
@@ -49,9 +51,13 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         # 2. Process is_carrying flag
         is_carrying = observations["is_carrying"].float()
         is_carrying = is_carrying.view(is_carrying.shape[0], -1)
+
+        # 3. Process last_action flag
+        last_action = observations["last_action"].float()
+        last_action = last_action.view(last_action.shape[0], -1)
             
-        # 3. Concatenate all features
-        combined = torch.cat((cnn_features, is_carrying), dim=1)
+        # 4. Concatenate all features (576 + 2 + 7 = 585 dims)
+        combined = torch.cat((cnn_features, is_carrying, last_action), dim=1)
         
-        # 4. Project to features_dim
+        # 5. Project to features_dim
         return self.linear(combined)
