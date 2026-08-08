@@ -5,14 +5,11 @@ import gymnasium as gym
 
 class CustomCombinedExtractor(BaseFeaturesExtractor):
     """
-    Custom feature extractor that splits the Dict observation space.
-    - Passes the 15x15x5 grid through a CNN.
-    - Passes the `is_carrying` scalar through directly.
-    - Concatenates the features into a single 1D tensor for the PPO MLP.
+    Custom feature extractor for HiveMind:
+    - Passes the 15x15x5 egocentric grid through a CNN (local spatial/obstacle perception).
+    - Concatenates `is_carrying` scalar (phase flag).
     """
     def __init__(self, observation_space: gym.spaces.Dict, features_dim: int = 256):
-        # We do not pass features_dim to super init immediately because we need to calculate it.
-        # Actually, BaseFeaturesExtractor requires features_dim in super().__init__.
         super().__init__(observation_space, features_dim)
 
         # CNN for the grid (15x15x5)
@@ -30,9 +27,10 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         with torch.no_grad():
             dummy_grid = torch.zeros(1, 5, 15, 15)
             cnn_output_dim = self.cnn(dummy_grid).shape[1]
-            
-        # Total features = CNN features + 2 (is_carrying flag one-hot encoded by SB3)
-        total_concat_dim = cnn_output_dim + 2
+            # SB3 automatically one-hot encodes Discrete(2) into 2 dims
+            dummy_carrying = torch.zeros(1, 2)
+            dummy_combined = torch.cat((torch.zeros(1, cnn_output_dim), dummy_carrying), dim=1)
+            total_concat_dim = dummy_combined.shape[1]
         
         # Final linear layer to project to requested `features_dim`
         self.linear = nn.Sequential(
@@ -43,8 +41,6 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
     def forward(self, observations: dict) -> torch.Tensor:
         # 1. Process the Grid
         grid = observations["grid"]
-        # grid shape from env is (N, 15, 15, 5). PyTorch Conv2D expects (N, 5, 15, 15).
-        # We permute the dimensions to match PyTorch format.
         if grid.shape[-1] == 5:
             grid = grid.permute(0, 3, 1, 2)
             
@@ -52,11 +48,10 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
         
         # 2. Process is_carrying flag
         is_carrying = observations["is_carrying"].float()
-        # Flatten to ensure it's 2D (N, features) regardless of how SB3 one-hots it
         is_carrying = is_carrying.view(is_carrying.shape[0], -1)
             
-        # 3. Concatenate
+        # 3. Concatenate all features
         combined = torch.cat((cnn_features, is_carrying), dim=1)
         
-        # 4. Project
+        # 4. Project to features_dim
         return self.linear(combined)

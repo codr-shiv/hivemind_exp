@@ -13,11 +13,11 @@ def test_perception():
 
     print(f"Observation 'grid' shape: {grid.shape} (Expected: (15, 15, 5))")
     print(f"Observation 'is_carrying': {is_carrying}")
-    print(f"LiDAR rays count: {len(lidar_distances)} (Expected: 36)")
+    print(f"LiDAR rays count: {len(lidar_distances)} (Expected: 180)")
     print(f"LiDAR distance range: min={min(lidar_distances):.3f}m, max={max(lidar_distances):.3f}m")
 
     assert grid.shape == (15, 15, 5), f"Invalid grid shape {grid.shape}"
-    assert len(lidar_distances) == 36, f"Invalid ray count {len(lidar_distances)}"
+    assert len(lidar_distances) == 180, f"Invalid ray count {len(lidar_distances)}"
     assert grid[7, 7, 4] == 1.0, "Self-agent center channel missing"
 
     # Step through 5 actions and print perception state
